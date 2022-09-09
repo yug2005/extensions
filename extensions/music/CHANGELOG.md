@@ -1,6 +1,13 @@
 # Apple Music Changelog
 
+## [Grid View / Menu Bar]
+
+- Added grid view with album artwork using Last FM API
+- Added new menu bar command to control Apple Music
+- Using cache with background refresh on the menu bar command
+
 ## [Update] - 2022-07-27
+
 - Improved error reporting
 - New README and screenshots
 
@@ -16,6 +23,7 @@ Squashed a few bugs in "Play Library Album"
 - Renamed "Search & Play Library Track" to "Play Library Track"
 
 ## [Fix] - 2022-05-30
+
 Fixed issue that caused the extension to crash
 
 ## [Track Rating / Fixes] - 2022-05-05
@@ -30,11 +38,11 @@ Added new search and play playlist feature to extension
 
 ## [New Commands] - 2021-12-20
 
-Add commands to love, and add the currently playing track to your library
+Add commands to favorite, and add the currently playing track to your library
 
-## [Love & Dislike] - 2021-11-30
+## [Favorite & Dislike] - 2021-11-30
 
-Adds love/dislike to Apple Music extension
+Adds favorite/dislike to Apple Music extension
 
 ## [Initial Version] - 2021-11-18
 
