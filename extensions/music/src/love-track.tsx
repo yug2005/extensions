@@ -1,13 +1,15 @@
 import { showHUD } from "@raycast/api";
 import { pipe } from "fp-ts/lib/function";
-import * as TE from "fp-ts/TaskEither";
 
+import { handleTaskEitherError } from "./util/error-handling";
 import * as music from "./util/scripts";
 
 export default async () => {
   await pipe(
     music.player.love,
-    TE.map(() => showHUD("Track Loved")),
-    TE.mapLeft(() => showHUD("Failed to Love Track"))
+    handleTaskEitherError(
+      () => showHUD("Track Loved"),
+      () => showHUD("Failed to Love Track")
+    )
   )();
 };

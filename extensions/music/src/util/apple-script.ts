@@ -18,7 +18,7 @@ export const tellMusic = (command: string) => tell("Music", command);
  *  objectToString({
  *     id: 'trackId',
  *     name: 'trackName',
- *  }) // => "id=" & trackId & "name=" & trackName"
+ *  }) // => "id=" & trackId & "$breakname=" & trackName"
  */
 export const createQueryString = <T extends object>(obj: T): string => {
   return Object.entries(obj).reduce((acc, [key, value], i) => {
@@ -32,3 +32,8 @@ export const createQueryString = <T extends object>(obj: T): string => {
 
 // prettier-ignore
 export const parseQueryString = <T = any>() =>(querystring: string): T => Object.fromEntries(new URLSearchParams(querystring)) as unknown as T
+
+const p =
+  <T>() =>
+  (queryString: string): T =>
+    Object.fromEntries(queryString.split("$break").map((s) => s.split("="))) as unknown as T;

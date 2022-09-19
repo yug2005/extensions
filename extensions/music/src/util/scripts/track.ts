@@ -1,16 +1,23 @@
+import { flow, pipe } from "fp-ts/lib/function";
 import { runAppleScript } from "run-applescript";
 
 import { createQueryString, runScript, tellMusic } from "../apple-script";
 import { parseImageStream, getAlbumArtwork } from "../artwork";
 import { queryCache, setCache } from "../cache";
 import { Track } from "../models";
+import * as A from "fp-ts/NonEmptyArray";
+import * as S from "fp-ts/string";
+import * as TE from "../task-either";
 import { constructDate, getAttribute } from "../utils";
 
-export const getAllTracks = async (useCache = true): Promise<Track[]> => {
+const removeLast = <T>(arr: A.NonEmptyArray<T>): A.NonEmptyArray<T> => arr.slice(0, -1) as A.NonEmptyArray<T>;
+
+export const getAllTracks = async (useCache = true): TE.TaskEither<Error, Track[]> => {
   if (useCache) {
     const cachedTracks = queryCache("tracks");
+
     if (cachedTracks) {
-      return cachedTracks;
+      return TE.right(cachedTracks);
     }
   }
 
@@ -26,7 +33,7 @@ export const getAllTracks = async (useCache = true): Promise<Track[]> => {
     duration: "duration",
   });
 
-  const response = await runAppleScript(`
+  const script = `
     set output to ""
     tell application "Music"
       set allTracks to every track
@@ -35,7 +42,19 @@ export const getAllTracks = async (useCache = true): Promise<Track[]> => {
       end repeat
     end tell
     return output
-  `);
+  `;
+
+  pipe(
+    runScript(script),
+    TE.map((a) => a),
+    TE.map(
+      flow(
+        S.split("\n"),
+        (s) => s.slice(0, -1),
+        A.map((line) => {})
+      )
+    )
+  );
 
   let tracks: Track[] = response
     .split("\n")
@@ -69,7 +88,7 @@ export const play = (track: Track) =>
   );
 
 export const revealTrack = (track: Track) =>
-  runScript(`tell application "Music" 
+  runScript(`tell application "Music"
     reveal (every track whose name is "${track.name}" and album is "${track.album}" and artist is "${track.artist}")
     activate
   end tell`);
@@ -79,7 +98,7 @@ export const playOnRepeat = (track: Track) =>
   tell application "System Events"
     set activeApp to name of first application process whose frontmost is true
   end tell
-  tell application "Music" 
+  tell application "Music"
     set song repeat to one
     reveal (every track whose name is "${track.name}" and album is "${track.album}" and artist is "${track.artist}")
     activate
@@ -151,7 +170,7 @@ export const getCurrentTrackDetails = async (): Promise<Track> => {
       if inLibrary then
         set myTrack to first track of ${matchingTracks}
         tell myTrack to set output to output & ${outputQuery} & "\n"
-      else 
+      else
         tell current track to set output to output & ${outputQuery} & "\n"
       end if
     end tell

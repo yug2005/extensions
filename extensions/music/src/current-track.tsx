@@ -1,6 +1,5 @@
 import { List, Detail, Action, ActionPanel, Icon, Toast, showToast, showHUD } from "@raycast/api";
 import { pipe } from "fp-ts/lib/function";
-import * as TE from "fp-ts/TaskEither";
 import json2md from "json2md";
 import { useEffect, useState } from "react";
 
@@ -9,10 +8,11 @@ import PlayPlaylist from "./play-playlist";
 import PlayTrack from "./play-track";
 import { DetailMetadata } from "./track-detail";
 import { refreshCache, wait } from "./util/cache";
+import { handleTaskEitherError } from "./util/error-handling";
 import { Track } from "./util/models";
 import { Icons } from "./util/presets";
 import * as music from "./util/scripts";
-import { handleTaskEitherError } from "./util/utils";
+import * as TE from "./util/task-either";
 
 export default function CurrentTrack() {
   const [track, setTrack] = useState<Track | undefined>(undefined);
@@ -38,6 +38,7 @@ export default function CurrentTrack() {
         setNoTrack(true);
       }
     };
+
     getTrack();
     return () => {
       setTrack(undefined);
@@ -61,9 +62,7 @@ export default function CurrentTrack() {
             title="Show Apple Music"
             icon={Icons.Music}
             shortcut={{ modifiers: ["cmd"], key: "s" }}
-            onAction={async () => {
-              await handleTaskEitherError(music.player.activate)();
-            }}
+            onAction={pipe(music.player.activate, handleTaskEitherError())}
           />
         </ActionPanel>
       }
@@ -85,17 +84,17 @@ export default function CurrentTrack() {
             <Action
               title={playing ? "Pause" : "Play"}
               icon={playing ? Icon.Pause : Icon.Play}
-              onAction={async () => {
-                await handleTaskEitherError(music.player.togglePlay)();
-                setPlaying(!playing);
-              }}
+              onAction={pipe(
+                music.player.togglePlay,
+                handleTaskEitherError(() => setPlaying((isPlaying) => !isPlaying))
+              )}
             />
             <Action
               title="Show Track"
               icon={Icons.Music}
               onAction={async () => {
-                await handleTaskEitherError(music.player.revealTrack)();
-                await handleTaskEitherError(music.player.activate)();
+                await handleTaskEitherError()(music.player.revealTrack)();
+                await handleTaskEitherError()(music.player.activate)();
               }}
             />
             {!track.inLibrary && (
@@ -122,8 +121,8 @@ export default function CurrentTrack() {
               icon={Icon.Heart}
               shortcut={{ modifiers: ["cmd"], key: "l" }}
               onAction={async () => {
-                await handleTaskEitherError(music.player.toggleLove)();
                 setTrack({ ...track, loved: !track.loved });
+                await pipe(music.player.toggleLove, handleTaskEitherError())();
               }}
             />
             <Action
@@ -131,28 +130,37 @@ export default function CurrentTrack() {
               icon={Icon.HeartDisabled}
               shortcut={{ modifiers: ["cmd"], key: "d" }}
               onAction={async () => {
-                await handleTaskEitherError(music.player.dislike)();
-                await handleTaskEitherError(music.player.setRating(0))();
-                setTrack({ ...track, rating: 0 });
+                await pipe(
+                  music.player.dislike,
+                  handleTaskEitherError(() => showHUD("Failed to Dislike"))
+                )();
+
+                // Reset rating if the track is in the library
+                if (track.inLibrary && track.rating) {
+                  setTrack({ ...track, rating: 0 });
+                  await pipe(music.player.setRating(0), handleTaskEitherError())();
+                }
               }}
             />
-            <ActionPanel.Submenu title="Set Rating" icon={Icon.Star} shortcut={{ modifiers: ["cmd"], key: "r" }}>
-              {Array.from({ length: 6 }, (_, i) => i).map((rating) => (
-                <Action
-                  key={rating}
-                  title={`${rating} Star${rating === 1 ? "" : "s"}`}
-                  icon={track.rating === rating ? Icons.StarFilled : Icons.Star}
-                  onAction={async () => {
-                    await pipe(
+            {track.inLibrary && (
+              <ActionPanel.Submenu title="Set Rating" icon={Icon.Star} shortcut={{ modifiers: ["cmd"], key: "r" }}>
+                {Array.from({ length: 6 }, (_, i) => i).map((rating) => (
+                  <Action
+                    key={rating}
+                    title={`${rating} Star${rating === 1 ? "" : "s"}`}
+                    icon={track.rating === rating ? Icons.StarFilled : Icons.Star}
+                    onAction={pipe(
                       rating * 20,
                       music.player.setRating,
-                      TE.map(() => setTrack({ ...track, rating: rating })),
-                      TE.mapLeft(() => showHUD("Add Track to Library to Set Rating"))
-                    )();
-                  }}
-                />
-              ))}
-            </ActionPanel.Submenu>
+                      handleTaskEitherError(
+                        () => setTrack({ ...track, rating: rating }),
+                        () => showHUD("Add Track to Library to Set Rating")
+                      )
+                    )}
+                  />
+                ))}
+              </ActionPanel.Submenu>
+            )}
           </ActionPanel>
         )
       }

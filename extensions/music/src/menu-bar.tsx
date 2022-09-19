@@ -1,13 +1,15 @@
 import { MenuBarExtra, Icon, Color, Image, environment, LaunchType, showHUD } from "@raycast/api";
+import * as B from "fp-ts/boolean";
 import { pipe } from "fp-ts/lib/function";
 import * as TE from "fp-ts/TaskEither";
 import { useState, useEffect } from "react";
 
 import { refreshCache, wait } from "./util/cache";
+import { handleTaskEitherError } from "./util/error-handling";
 import { MusicState } from "./util/models";
 import { Icons, AppleMusicColor } from "./util/presets";
 import * as music from "./util/scripts";
-import { handleTaskEitherError, trimTitle } from "./util/utils";
+import { trimTitle } from "./util/utils";
 
 export default function MenuBar() {
   const [state, setState] = useState<MusicState | undefined>(undefined);
@@ -38,12 +40,7 @@ export default function MenuBar() {
   if (isLoading || state === undefined) {
     return (
       <MenuBarExtra isLoading={isLoading} icon={Icons.Music} tooltip="Apple Music">
-        <MenuBarExtra.Item
-          title="Show Apple Music"
-          onAction={async () => {
-            await handleTaskEitherError(music.player.activate)();
-          }}
-        />
+        <MenuBarExtra.Item title="Show Apple Music" onAction={pipe(music.player.activate, handleTaskEitherError())} />
       </MenuBarExtra>
     );
   }
@@ -56,8 +53,13 @@ export default function MenuBar() {
           title={trimTitle(state.title)}
           icon={{ source: artwork || "", mask: Image.Mask.Circle }}
           onAction={async () => {
-            await handleTaskEitherError(music.player.revealTrack)();
-            await handleTaskEitherError(music.player.activate)();
+            await pipe(
+              music.player.revealTrack,
+              handleTaskEitherError(() => showHUD("Failed to Reveal Track"))
+            )();
+
+            // if this fails we don't care too much.
+            await pipe(music.player.activate, handleTaskEitherError())();
           }}
         />
       }
@@ -67,7 +69,18 @@ export default function MenuBar() {
         icon={state.playing ? Icon.Pause : Icon.Play}
         onAction={async () => {
           setState({ ...state, playing: !state.playing });
-          await handleTaskEitherError(state.playing ? music.player.pause : music.player.play)();
+          await pipe(
+            state.playing,
+            B.foldW(
+              () =>
+                TE.tryCatch(
+                  () => Promise.reject(new Error("Whoops")),
+                  (e) => (e instanceof Error ? e : new Error(e as any))
+                ) as TE.TaskEither<Error, string>,
+              () => music.player.pause
+            ),
+            handleTaskEitherError(() => showHUD(`Could not ${state.playing ? "Pause" : "Play"} the track.`))
+          )();
         }}
       />
       <MenuBarExtra.Item
@@ -76,7 +89,8 @@ export default function MenuBar() {
         onAction={async () => {
           const nextState = state.repeat === "off" ? "all" : state.repeat === "all" ? "one" : "off";
           setState({ ...state, repeat: nextState });
-          await handleTaskEitherError(music.player.setRepeatMode(nextState))();
+
+          await handleTaskEitherError()(music.player.setRepeatMode(nextState))();
         }}
       />
       <MenuBarExtra.Item
@@ -84,48 +98,54 @@ export default function MenuBar() {
         icon={{ source: Icon.Shuffle, tintColor: state.shuffle ? AppleMusicColor : Color.PrimaryText }}
         onAction={async () => {
           setState({ ...state, shuffle: !state.shuffle });
-          await handleTaskEitherError(music.player.setShuffle(!state.shuffle))();
+          await pipe(
+            music.player.setShuffle(!state.shuffle),
+            handleTaskEitherError(() => showHUD("Failed to Shuffle"))
+          )();
         }}
       />
       <MenuBarExtra.Separator />
       <MenuBarExtra.Item
         title="Next Track"
         icon={Icon.Forward}
-        onAction={async () => {
-          await handleTaskEitherError(music.player.next)();
-        }}
+        onAction={pipe(
+          music.player.next,
+          handleTaskEitherError(() => showHUD("Operation Failed"))
+        )}
       />
       <MenuBarExtra.Item
         title="Previous Track"
         icon={Icon.Rewind}
-        onAction={async () => {
-          await handleTaskEitherError(music.player.previous)();
-        }}
+        onAction={pipe(
+          music.player.previous,
+          handleTaskEitherError(() => showHUD("Operation Failed"))
+        )}
       />
       <MenuBarExtra.Item
         title="Restart Track"
         icon={Icon.ArrowCounterClockwise}
-        onAction={async () => {
-          await handleTaskEitherError(music.player.restart)();
-        }}
+        onAction={pipe(
+          music.player.restart,
+          handleTaskEitherError(() => showHUD("Failed to Restart"))
+        )}
       />
       <MenuBarExtra.Separator />
       {!state.added && (
         <MenuBarExtra.Item
           title={"Add to Library"}
           icon={Icon.Plus}
-          onAction={async () => {
-            await pipe(
-              music.player.addToLibrary,
-              TE.map(async () => {
+          onAction={pipe(
+            music.player.addToLibrary,
+            handleTaskEitherError(
+              () => showHUD("Failed to Add to Library"),
+              async () => {
                 showHUD("Added to Library");
-                setState({ ...state, added: true });
+                setState((s) => (s ? { ...s, added: true } : s));
                 await wait(5);
                 await refreshCache();
-              }),
-              TE.mapLeft(() => showHUD("Failed to Add to Library"))
-            )();
-          }}
+              }
+            )
+          )}
         />
       )}
       <MenuBarExtra.Item
@@ -133,7 +153,13 @@ export default function MenuBar() {
         icon={state.loved ? Icon.HeartDisabled : Icon.Heart}
         onAction={async () => {
           setState({ ...state, loved: !state.loved });
-          await handleTaskEitherError(music.player.toggleLove)();
+          await pipe(
+            music.player.toggleLove,
+            handleTaskEitherError(
+              () => showHUD("Failed to love"),
+              () => showHUD("Loved")
+            )
+          )();
         }}
       />
       <MenuBarExtra.Submenu title="Set Rating" icon={Icons.Star}>
@@ -158,9 +184,10 @@ export default function MenuBar() {
           <MenuBarExtra.Item
             key={i}
             title={`${i * 25}`}
-            onAction={async () => {
-              await handleTaskEitherError(music.player.setVolume(i * 25))();
-            }}
+            onAction={pipe(
+              music.player.setVolume(i * 25),
+              handleTaskEitherError(() => showHUD("Failed to rate"))
+            )}
           />
         ))}
       </MenuBarExtra.Submenu>
