@@ -1,7 +1,12 @@
 import { Grid, List, Action, ActionPanel, Icon, closeMainWindow } from "@raycast/api";
+import { pipe, flow } from "fp-ts/lib/function";
+import * as O from "fp-ts/Option";
+import * as A from "fp-ts/ReadonlyArray";
+import * as T from "fp-ts/Task";
 import { useState, useEffect } from "react";
 
 import { Tracks } from "./tracks";
+import { displayError } from "./util/error-handling";
 import {
   ListOrGrid,
   ListOrGridDropdown,
@@ -15,9 +20,10 @@ import {
 import { Album } from "./util/models";
 import { Icons } from "./util/presets";
 import * as music from "./util/scripts";
+import * as TE from "./util/task-either";
 
 export default function PlayAlbum() {
-  const [albums, setAlbums] = useState<Album[]>([]);
+  const [albums, setAlbums] = useState<readonly Album[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const [search, setSearch] = useState<string>("");
@@ -27,24 +33,36 @@ export default function PlayAlbum() {
 
   useEffect(() => {
     const getAlbums = async () => {
-      const tracks = await music.track.getAllTracks();
-      const albums: Album[] = [];
-      for (const track of tracks) {
-        const id = `${track.album}-${track.albumArtist}`;
-        const album = albums.find((a) => a.id === id);
-        if (album) {
-          album.tracks.push(track);
-        } else {
-          albums.push({
-            id: id,
-            name: track.album,
-            artist: track.albumArtist,
-            artwork: track.artwork,
-            genre: track.genre,
-            tracks: [track],
-          });
-        }
-      }
+      const albums = await pipe(
+        music.track.getAllTracks(),
+        TE.mapLeft(displayError),
+        TE.map(
+          flow(
+            A.map((track) => {
+              const id = `${track.album}-${track.albumArtist}`;
+
+              return pipe(
+                [] as Album[],
+                A.findFirst((s) => s.id === id),
+                O.map((a) => ({ ...a, tracks: [...a.tracks, track] })),
+                O.getOrElse(
+                  () =>
+                    ({
+                      id,
+                      name: track.album,
+                      artist: track.albumArtist ?? track.artist,
+                      artwork: track.artwork,
+                      genre: track.genre,
+                      tracks: [track],
+                    } as Album)
+                )
+              );
+            })
+          )
+        ),
+        TE.getOrElse(() => T.of([] as readonly Album[]))
+      )();
+
       setAlbums(albums);
       setIsLoading(false);
     };

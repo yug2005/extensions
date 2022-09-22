@@ -1,21 +1,27 @@
-import { pipe } from "fp-ts/lib/function";
-import * as TE from "fp-ts/TaskEither";
+import { flow, pipe } from "fp-ts/lib/function";
+import * as O from "fp-ts/Option";
+import * as A from "fp-ts/ReadonlyArray";
+import * as S from "fp-ts/string";
+import * as T from "fp-ts/Task";
 import { runAppleScript } from "run-applescript";
 
 import { tell, runScript, createQueryString } from "../apple-script";
+import { removeLast } from "../array-utils";
 import { parseImageStream } from "../artwork";
-import { queryCache, setCache } from "../cache";
+import { getCachedPlaylists, getCachedPlaylistTracks, queryCache, setCache } from "../cache";
 import { Track, Playlist, PlaylistKind } from "../models";
+import * as TE from "../task-either";
 import { constructDate, getAttribute } from "../utils";
-import { getTrackArtwork } from "./track";
+import { sortByName } from "./sort";
+import { addTrackArtwork } from "./track";
 
 import { general } from ".";
 
 export const getPlaylists = async (useCache = true): Promise<Playlist[]> => {
   if (useCache) {
-    const playlistCache = queryCache("playlists");
-    if (playlistCache) {
-      return playlistCache;
+    const playlistCache = getCachedPlaylists();
+    if (O.isSome(playlistCache)) {
+      return playlistCache.value;
     }
   }
 
@@ -76,11 +82,11 @@ export const getPlaylistArtwork = async (id: string, size?: number): Promise<str
   return await parseImageStream(data, size ? { width: size, height: size } : undefined);
 };
 
-export const getPlaylistTracks = async (id: string, useCache = true): Promise<Track[]> => {
+export const getPlaylistTracks = (id: string, useCache = true): TE.TaskEither<Error, readonly Track[]> => {
   if (useCache) {
-    const cachedTracks = queryCache(id);
-    if (cachedTracks) {
-      return cachedTracks;
+    const cachedTracks = getCachedPlaylistTracks(id);
+    if (O.isSome(cachedTracks)) {
+      return TE.of(cachedTracks.value);
     }
   }
 
@@ -96,7 +102,7 @@ export const getPlaylistTracks = async (id: string, useCache = true): Promise<Tr
     duration: "duration",
   });
 
-  const response = await runAppleScript(`
+  const script = `
 		set output to ""
 			tell application "Music"
 				set allTracks to tracks of first playlist of (every playlist whose id is ${id})
@@ -105,32 +111,36 @@ export const getPlaylistTracks = async (id: string, useCache = true): Promise<Tr
 				end repeat
 			end tell
 		return output
-	`);
+	`;
 
-  let tracks: Track[] = response
-    .split("\n")
-    .slice(0, -1)
-    .map((line: string) => ({
-      id: getAttribute(line, "id"),
-      name: getAttribute(line, "name"),
-      artist: getAttribute(line, "artist"),
-      album: getAttribute(line, "album"),
-      albumArtist: getAttribute(line, "albumArtist"),
-      genre: getAttribute(line, "genre"),
-      dateAdded: constructDate(getAttribute(line, "dateAdded")).getTime(),
-      playedCount: parseInt(getAttribute(line, "playedCount")),
-      duration: parseFloat(getAttribute(line, "duration")),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  const promises = tracks.map(async (track: Track) => {
-    const artwork = await getTrackArtwork(track);
-    return { ...track, artwork };
-  });
-
-  tracks = await Promise.all(promises);
-  setCache(id, tracks);
-  return tracks;
+  return pipe(
+    runScript(script),
+    TE.tapLeft(console.error),
+    TE.map(
+      flow(
+        S.split("\n"),
+        removeLast,
+        A.map(
+          (line): Track => ({
+            id: getAttribute(line, "id"),
+            name: getAttribute(line, "name"),
+            artist: getAttribute(line, "artist"),
+            album: getAttribute(line, "album"),
+            albumArtist: getAttribute(line, "albumArtist"),
+            genre: getAttribute(line, "genre"),
+            dateAdded: constructDate(getAttribute(line, "dateAdded")).getTime(),
+            playedCount: parseInt(getAttribute(line, "playedCount")),
+            duration: parseFloat(getAttribute(line, "duration")) ?? 0,
+          })
+        ),
+        A.sortBy([sortByName])
+      )
+    ),
+    TE.getOrElse(() => T.of<readonly Track[]>([])),
+    TE.fromTask,
+    TE.chain(flow(A.map(addTrackArtwork), TE.sequenceArray)),
+    TE.tap((tracks) => setCache(id, tracks))
+  );
 };
 
 export const play =

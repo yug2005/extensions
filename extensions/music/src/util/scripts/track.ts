@@ -1,23 +1,25 @@
 import { flow, pipe } from "fp-ts/lib/function";
+import * as O from "fp-ts/Option";
+import * as A from "fp-ts/ReadonlyArray";
+import * as S from "fp-ts/string";
+import * as T from "fp-ts/Task";
 import { runAppleScript } from "run-applescript";
 
 import { createQueryString, runScript, tellMusic } from "../apple-script";
+import { removeLast } from "../array-utils";
 import { parseImageStream, getAlbumArtwork } from "../artwork";
-import { queryCache, setCache } from "../cache";
+import { getCachedTracks, queryCache, setCache } from "../cache";
 import { Track } from "../models";
-import * as A from "fp-ts/NonEmptyArray";
-import * as S from "fp-ts/string";
 import * as TE from "../task-either";
 import { constructDate, getAttribute } from "../utils";
+import { sortByName } from "./sort";
 
-const removeLast = <T>(arr: A.NonEmptyArray<T>): A.NonEmptyArray<T> => arr.slice(0, -1) as A.NonEmptyArray<T>;
-
-export const getAllTracks = async (useCache = true): TE.TaskEither<Error, Track[]> => {
+export const getAllTracks = (useCache = true): TE.TaskEither<Error, readonly Track[]> => {
   if (useCache) {
-    const cachedTracks = queryCache("tracks");
+    const cachedTracks = getCachedTracks();
 
-    if (cachedTracks) {
-      return TE.right(cachedTracks);
+    if (O.isSome(cachedTracks)) {
+      return TE.right(cachedTracks.value);
     }
   }
 
@@ -44,42 +46,34 @@ export const getAllTracks = async (useCache = true): TE.TaskEither<Error, Track[
     return output
   `;
 
-  pipe(
+  return pipe(
     runScript(script),
-    TE.map((a) => a),
+    TE.tapLeft(console.error),
     TE.map(
       flow(
         S.split("\n"),
-        (s) => s.slice(0, -1),
-        A.map((line) => {})
+        removeLast,
+        A.map(
+          (line): Track => ({
+            id: getAttribute(line, "id"),
+            name: getAttribute(line, "name"),
+            artist: getAttribute(line, "artist"),
+            album: getAttribute(line, "album"),
+            albumArtist: getAttribute(line, "albumArtist"),
+            genre: getAttribute(line, "genre"),
+            dateAdded: constructDate(getAttribute(line, "dateAdded")).getTime(),
+            playedCount: parseInt(getAttribute(line, "playedCount")),
+            duration: parseFloat(getAttribute(line, "duration")) ?? 0,
+          })
+        ),
+        A.sortBy([sortByName])
       )
-    )
+    ),
+    TE.getOrElse(() => T.of<readonly Track[]>([])),
+    TE.fromTask,
+    TE.chain(flow(A.map(addTrackArtwork), TE.sequenceArray)), // think of this like Promise.all but in parallel.
+    TE.tap((tracks) => setCache("tracks", tracks))
   );
-
-  let tracks: Track[] = response
-    .split("\n")
-    .slice(0, -1)
-    .map((line: string) => ({
-      id: getAttribute(line, "id"),
-      name: getAttribute(line, "name"),
-      artist: getAttribute(line, "artist"),
-      album: getAttribute(line, "album"),
-      albumArtist: getAttribute(line, "albumArtist"),
-      genre: getAttribute(line, "genre"),
-      dateAdded: constructDate(getAttribute(line, "dateAdded")).getTime(),
-      playedCount: parseInt(getAttribute(line, "playedCount")),
-      duration: parseFloat(getAttribute(line, "duration")),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  const promises = tracks.map(async (track: Track) => {
-    const artwork = await getTrackArtwork(track);
-    return { ...track, artwork };
-  });
-
-  tracks = await Promise.all(promises);
-  setCache("tracks", tracks);
-  return tracks;
 };
 
 export const play = (track: Track) =>
@@ -107,8 +101,31 @@ export const playOnRepeat = (track: Track) =>
   tell application activeApp to activate
   `);
 
-export const getTrackArtwork = async (track: Track): Promise<string> => {
-  return (await getAlbumArtwork(track.albumArtist, track.album)) || "../assets/no-track.png";
+export const addTrackArtwork = (track: Track): TE.TaskEither<Error, Track> => {
+  return pipe(
+    track,
+    getTrackArtwork,
+    TE.map((artwork) => ({ ...track, artwork }))
+  );
+};
+
+export const getTrackArtwork = (track: Track): TE.TaskEither<Error, string> => {
+  const default_artwork = "../assets/no-track.png";
+
+  return pipe(
+    getAlbumArtwork(track.albumArtist || track.artist, track.album || track.name),
+    TE.orElse(() =>
+      (track.album || track.name).includes(" - Single")
+        ? getAlbumArtwork(track.albumArtist || track.artist, (track.album || track.name).replace(" - Single", ""))
+        : TE.right(default_artwork)
+    ),
+    TE.map(
+      flow(
+        O.fromNullable,
+        O.getOrElse(() => default_artwork)
+      )
+    )
+  );
 };
 
 export const getTrackDetails = async (track: Track): Promise<Track> => {
