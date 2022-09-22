@@ -16,7 +16,7 @@ export const ScriptError = {
   is: (error: Error): error is ScriptError => "shortMessage" in error,
 };
 
-function displayError(error: Error | ScriptError) {
+export function displayError(error: Error | ScriptError) {
   const message = ScriptError.is(error) ? error.shortMessage : error.message;
 
   if (isMenuBar()) {
