@@ -75,3 +75,23 @@ export interface Preferences {
   playlistTracksLayout: "list" | "grid";
   trackDropdown: TrackDropdownOption;
 }
+
+export interface ILastFmAlbumResponse {
+  album: {
+    artist: string;
+    mbid: string;
+    playcount: string;
+    url: string;
+    name: string;
+    wiki: {
+      published: string;
+      summary: string;
+      content: string;
+    };
+    listeners: string;
+    image: {
+      size: string;
+      ["#text"]: string;
+    }[];
+  };
+}
