@@ -8,8 +8,8 @@ export default async () => {
   await pipe(
     music.player.love,
     handleTaskEitherError(
-      () => showHUD("Track Loved"),
-      () => showHUD("Failed to Love Track")
+      () => showHUD("Failed to Love Track"),
+      () => showHUD("Track Loved")
     )
   )();
 };
