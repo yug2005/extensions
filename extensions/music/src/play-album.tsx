@@ -6,7 +6,7 @@ import * as T from "fp-ts/Task";
 import { useState, useEffect } from "react";
 
 import { Tracks } from "./tracks";
-import { displayError } from "./util/error-handling";
+import { handleTaskEitherError } from "./util/error-handling";
 import {
   ListOrGrid,
   ListOrGridDropdown,
@@ -35,7 +35,7 @@ export default function PlayAlbum() {
     const getAlbums = async () => {
       const albums = await pipe(
         music.track.getAllTracks(),
-        TE.mapLeft(displayError),
+        handleTaskEitherError("An error has occurred."),
         TE.map(
           flow(
             A.map((track) => {
@@ -94,11 +94,11 @@ export default function PlayAlbum() {
           return album.name.toLowerCase().includes(search) || album.artist.toLowerCase().includes(search);
         })
         .sort((a: Album, b: Album) => a.artist.localeCompare(b.artist) || a.name.localeCompare(b.name))
-        .map((album) =>
+        .map((album, idx) =>
           mainLayout === LayoutType.Grid ? (
             <Grid.Item
-              key={album.id}
-              id={album.id}
+              key={idx}
+              id={idx.toString()}
               title={album.name}
               subtitle={album.artist}
               content={album.artwork || "../assets/no-track.png"}
@@ -106,8 +106,8 @@ export default function PlayAlbum() {
             />
           ) : (
             <List.Item
-              key={album.id}
-              id={album.id}
+              key={idx}
+              id={idx.toString()}
               title={album.name}
               accessories={[{ text: album.artist }]}
               icon={album.artwork || "../assets/no-track.png"}

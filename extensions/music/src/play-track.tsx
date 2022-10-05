@@ -13,7 +13,7 @@ export default function PlayTrack() {
 
   useEffect(() => {
     pipe(
-      music.track.getAllTracks(false),
+      music.track.getAllTracks(),
       TE.tap((tracks) => setTracks(tracks as Track[])),
       TE.tap(() => setIsLoading(false)),
       TE.tapLeft(() => setTracks([])),

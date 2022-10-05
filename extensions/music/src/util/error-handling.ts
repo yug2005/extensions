@@ -1,5 +1,6 @@
 import { Clipboard, open, showHUD, showToast, Toast } from "@raycast/api";
 import { pipe } from "fp-ts/function";
+import { Errors } from "io-ts";
 
 import * as TE from "./task-either";
 import { isMenuBar } from "./utils";
@@ -54,7 +55,7 @@ export function displayError(error: Error | ScriptError) {
 }
 
 // Function overload to accept multiple params types.
-function handleTaskEitherError<E extends Error, T>(
+function handleTaskEitherError<E extends Error | Errors, T>(
   onError?: VoidFn<E>,
   onSuccess?: VoidFn<T>
 ): (te: TE.TaskEither<E, T>) => TE.TaskEither<void, T>;
@@ -63,7 +64,7 @@ function handleTaskEitherError<E extends Error, T>(
  * @param errorMessage Used only in menu-bar {String}
  * @param successMessage Argument for `showHUD` {String}
  */
-function handleTaskEitherError<E extends Error, T>(
+function handleTaskEitherError<E extends Error | Errors, T>(
   errorMessage?: string,
   successMessage?: string
 ): (te: TE.TaskEither<E, T>) => TE.TaskEither<void, T>;

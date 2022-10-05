@@ -1,6 +1,6 @@
 import { Grid, List, Action, ActionPanel, closeMainWindow, showToast, Toast, useNavigation, Icon } from "@raycast/api";
-import { pipe } from "fp-ts/lib/function";
-import * as TE from "fp-ts/TaskEither";
+import { pipe } from "fp-ts/function";
+import * as T from "fp-ts/Task";
 import { useEffect, useState } from "react";
 
 import { PlaylistTracks } from "./playlist-tracks";
@@ -16,6 +16,7 @@ import {
 import { Playlist, PlaylistKind } from "./util/models";
 import { Icons } from "./util/presets";
 import * as music from "./util/scripts";
+import * as TE from "./util/task-either";
 
 const kindToString = (kind: PlaylistKind) => {
   switch (kind) {
@@ -37,14 +38,14 @@ export default function PlayPlaylist() {
   const { pop } = useNavigation();
 
   useEffect(() => {
-    const loadPlaylists = async () => {
-      setPlaylists(await music.playlists.getPlaylists());
-      setIsLoading(false);
-    };
-    loadPlaylists();
-    return () => {
-      setPlaylists([]);
-    };
+    pipe(
+      music.playlists.getPlaylists(),
+      TE.getOrElse(() => T.of([] as readonly Playlist[])),
+      T.map((data) => setPlaylists(data as Playlist[]))
+    )();
+
+    setIsLoading(false);
+    return () => setPlaylists([]);
   }, []);
 
   return (
