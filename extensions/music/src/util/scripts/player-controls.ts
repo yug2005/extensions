@@ -1,8 +1,10 @@
+import { pipe } from "fp-ts/lib/function";
 import { runAppleScript } from "run-applescript";
 
 import { runScript, tellMusic } from "../apple-script";
 import { createQueryString } from "../apple-script";
 import { MusicState } from "../models";
+import * as TE from "../task-either";
 import { getAttribute } from "../utils";
 
 export const activate = tellMusic("activate");
@@ -18,7 +20,10 @@ export const togglePlay = tellMusic("playpause");
 export const love = tellMusic("set loved of current track to true");
 export const dislike = tellMusic("set disliked of current track to true");
 export const toggleLove = tellMusic("set loved of current track to not loved of current track");
-export const addToLibrary = tellMusic(`duplicate current track to source "Library"`);
+export const addToLibrary = pipe(
+  tellMusic(`duplicate current track to source "Library"`),
+  TE.orElse(() => tellMusic(`duplicate current track to library playlist "Library"`))
+);
 
 export const setShuffle = (shuffle: boolean) => tellMusic(`set shuffle enabled to ${shuffle}`);
 export const setRepeatMode = (mode: "one" | "all" | "off") => tellMusic(`set song repeat to ${mode}`);
