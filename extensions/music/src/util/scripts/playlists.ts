@@ -1,14 +1,16 @@
+import * as E from "fp-ts/Either";
 import { flow, pipe } from "fp-ts/lib/function";
 import * as O from "fp-ts/Option";
 import * as A from "fp-ts/ReadonlyArray";
 import * as S from "fp-ts/string";
 import * as T from "fp-ts/Task";
+import { Errors } from "io-ts";
 import { runAppleScript } from "run-applescript";
 
 import { tell, runScript, createQueryString } from "../apple-script";
 import { removeLast } from "../array-utils";
 import { parseImageStream } from "../artwork";
-import { getCachedPlaylists, getCachedPlaylistTracks, queryCache, setCache } from "../cache";
+import { getCachedPlaylists, getCachedPlaylistTracks, setCache } from "../cache";
 import { Track, Playlist, PlaylistKind } from "../models";
 import * as TE from "../task-either";
 import { constructDate, getAttribute } from "../utils";
@@ -17,11 +19,12 @@ import { addTrackArtwork } from "./track";
 
 import { general } from ".";
 
-export const getPlaylists = async (useCache = true): Promise<Playlist[]> => {
+export const getPlaylists = (useCache = true): TE.TaskEither<Error | Errors, readonly Playlist[]> => {
   if (useCache) {
     const playlistCache = getCachedPlaylists();
+
     if (O.isSome(playlistCache)) {
-      return playlistCache.value;
+      return TE.right(playlistCache.value);
     }
   }
 
@@ -34,7 +37,7 @@ export const getPlaylists = async (useCache = true): Promise<Playlist[]> => {
     description: "description",
   });
 
-  const response = await runAppleScript(`
+  const script = `
       set output to ""
       tell application "Music"
         set allPlaylists to every playlist
@@ -44,32 +47,40 @@ export const getPlaylists = async (useCache = true): Promise<Playlist[]> => {
         end repeat
       end tell
       return output
-    `);
+    `;
 
-  let playlists: Playlist[] = response
-    .split("\n")
-    .slice(0, -1)
-    .map((line: string) => ({
-      id: getAttribute(line, "id"),
-      name: getAttribute(line, "name"),
-      duration: getAttribute(line, "duration"),
-      count: getAttribute(line, "count"),
-      time: getAttribute(line, "time"),
-      description: getAttribute(line, "description"),
-      kind: getAttribute(line, "kind") as PlaylistKind,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .filter((playlist) => playlist.name !== "Library" && playlist.name !== "Music");
-
-  const promises = playlists.map(async (playlist: Playlist) => {
-    const artwork = await getPlaylistArtwork(playlist.id, 300);
-    return { ...playlist, artwork };
-  });
-
-  playlists = await Promise.all(promises);
-  setCache("playlists", playlists);
-  return playlists;
+  return pipe(
+    runScript(script),
+    TE.tapLeft(console.error),
+    TE.map(
+      flow(
+        S.split("\n"),
+        removeLast,
+        A.map((line) => ({
+          id: getAttribute(line, "id"),
+          name: getAttribute(line, "name"),
+          duration: getAttribute(line, "duration"),
+          count: getAttribute(line, "count"),
+          time: getAttribute(line, "time"),
+          description: getAttribute(line, "description"),
+          kind: getAttribute(line, "kind") as PlaylistKind,
+        })),
+        A.filter((p) => p.name !== "Library" && p.name !== "Music"),
+        A.sortBy([sortByName])
+      )
+    ),
+    TE.getOrElse(() => T.of<readonly Playlist[]>([])),
+    TE.fromTask,
+    TE.chain(flow(A.map(addPlaylistArtwork), TE.sequenceArray)),
+    TE.tap((playlists) => setCache("playlists", playlists))
+  );
 };
+
+export const addPlaylistArtwork = (playlist: Playlist): TE.TaskEither<Error | Errors, Playlist> =>
+  pipe(
+    TE.tryCatch(() => getPlaylistArtwork(playlist.id, 300), E.toError),
+    TE.map((artwork) => ({ ...playlist, artwork }))
+  );
 
 export const getPlaylistArtwork = async (id: string, size?: number): Promise<string> => {
   const data = await runAppleScript(`
@@ -79,10 +90,11 @@ export const getPlaylistArtwork = async (id: string, size?: number): Promise<str
     end tell
     return playlistImage
   `);
+
   return await parseImageStream(data, size ? { width: size, height: size } : undefined);
 };
 
-export const getPlaylistTracks = (id: string, useCache = true): TE.TaskEither<Error, readonly Track[]> => {
+export const getPlaylistTracks = (id: string, useCache = true): TE.TaskEither<Error | Errors, readonly Track[]> => {
   if (useCache) {
     const cachedTracks = getCachedPlaylistTracks(id);
     if (O.isSome(cachedTracks)) {

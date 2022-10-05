@@ -3,18 +3,19 @@ import * as O from "fp-ts/Option";
 import * as A from "fp-ts/ReadonlyArray";
 import * as S from "fp-ts/string";
 import * as T from "fp-ts/Task";
+import { Errors } from "io-ts";
 import { runAppleScript } from "run-applescript";
 
 import { createQueryString, runScript, tellMusic } from "../apple-script";
 import { removeLast } from "../array-utils";
 import { parseImageStream, getAlbumArtwork } from "../artwork";
-import { getCachedTracks, queryCache, setCache } from "../cache";
+import { getCachedTracks, setCache } from "../cache";
 import { Track } from "../models";
 import * as TE from "../task-either";
 import { constructDate, getAttribute } from "../utils";
 import { sortByName } from "./sort";
 
-export const getAllTracks = (useCache = true): TE.TaskEither<Error, readonly Track[]> => {
+export const getAllTracks = (useCache = true): TE.TaskEither<Error | Errors, readonly Track[]> => {
   if (useCache) {
     const cachedTracks = getCachedTracks();
 
@@ -101,7 +102,7 @@ export const playOnRepeat = (track: Track) =>
   tell application activeApp to activate
   `);
 
-export const addTrackArtwork = (track: Track): TE.TaskEither<Error, Track> => {
+export const addTrackArtwork = (track: Track): TE.TaskEither<Error | Errors, Track> => {
   return pipe(
     track,
     getTrackArtwork,
@@ -109,7 +110,7 @@ export const addTrackArtwork = (track: Track): TE.TaskEither<Error, Track> => {
   );
 };
 
-export const getTrackArtwork = (track: Track): TE.TaskEither<Error, string> => {
+export const getTrackArtwork = (track: Track): TE.TaskEither<Error | Errors, string> => {
   const default_artwork = "../assets/no-track.png";
 
   return pipe(

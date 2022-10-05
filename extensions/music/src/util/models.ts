@@ -1,4 +1,5 @@
 import { Grid } from "@raycast/api";
+import * as t from "io-ts";
 
 export enum PlayerState {
   PLAYING = "playing",
@@ -76,22 +77,26 @@ export interface Preferences {
   trackDropdown: TrackDropdownOption;
 }
 
-export interface ILastFmAlbumResponse {
-  album: {
-    artist: string;
-    mbid: string;
-    playcount: string;
-    url: string;
-    name: string;
-    wiki: {
-      published: string;
-      summary: string;
-      content: string;
-    };
-    listeners: string;
-    image: {
-      size: string;
-      ["#text"]: string;
-    }[];
-  };
-}
+export const ILastFMAlbumResponse = t.type({
+  album: t.type({
+    artist: t.string,
+    mbid: t.string,
+    playcount: t.string,
+    url: t.string,
+    name: t.string,
+    wiki: t.type({
+      published: t.string,
+      summary: t.string,
+      content: t.string,
+    }),
+    listeners: t.string,
+    image: t.array(
+      t.type({
+        size: t.string,
+        ["#text"]: t.string,
+      })
+    ),
+  }),
+});
+
+export type ILastFMAlbumResponse = t.TypeOf<typeof ILastFMAlbumResponse>;
