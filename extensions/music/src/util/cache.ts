@@ -1,5 +1,8 @@
 import { Cache } from "@raycast/api";
+import { flow, pipe } from "fp-ts/lib/function";
 import * as O from "fp-ts/Option";
+import * as A from "fp-ts/ReadonlyArray";
+import * as TE from "fp-ts/TaskEither";
 
 import { Playlist, Track } from "./models";
 import * as music from "./scripts";
@@ -41,8 +44,13 @@ export const wait = async (seconds: number): Promise<void> => {
 
 export const refreshCache = async (): Promise<void> => {
   await music.track.getAllTracks(false)();
-
-  const playlists = await music.playlists.getPlaylists(false);
-  const promises = playlists.map((p) => music.playlists.getPlaylistTracks(p.id, false));
-  await Promise.all(promises);
+  await pipe(
+    music.playlists.getPlaylists(false),
+    TE.chain(
+      flow(
+        A.map((p) => music.playlists.getPlaylistTracks(p.id, false)),
+        TE.sequenceArray
+      )
+    )
+  )();
 };
