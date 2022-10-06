@@ -7,11 +7,13 @@ import * as TE from "fp-ts/TaskEither";
 import { Playlist, Track } from "./models";
 import * as music from "./scripts";
 
-const cache = new Cache();
+export const cache = new Cache();
 
 export enum ExpirationTime {
   Hour = 3600 * 1000,
   Day = 24 * Hour,
+  Week = Day * 7,
+  Month = Day * 30,
 }
 
 export const getCachedPlaylistTracks = (playlistId: string, expTime = ExpirationTime.Day): O.Option<Track[]> =>

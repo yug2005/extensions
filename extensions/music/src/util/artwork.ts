@@ -8,8 +8,8 @@ import * as A from "fp-ts/ReadonlyArray";
 import { Errors } from "io-ts";
 import fetch from "node-fetch";
 import resizeImg from "resize-image-buffer";
-import { runAppleScript } from "run-applescript";
 
+import { ExpirationTime, queryCache, setCache } from "./cache";
 import { ILastFMAlbumResponse } from "./models";
 import * as TE from "./task-either";
 
@@ -57,7 +57,7 @@ export const getAlbumArtwork = (artist: string, album: string): TE.TaskEither<Er
   const key = `${artist}-${album}`;
 
   if (artworks.has(key)) {
-    return TE.of(artworks.get(key));
+    return TE.right(artworks.get(key));
   }
 
   const url = new URL("http://ws.audioscrobbler.com/2.0");
@@ -67,9 +67,18 @@ export const getAlbumArtwork = (artist: string, album: string): TE.TaskEither<Er
   url.searchParams.set("api_key", api);
   url.searchParams.set("format", "json");
 
+  const unavailable_urls = pipe(
+    queryCache<string[]>("unavailable_urls", ExpirationTime.Week),
+    O.getOrElse(() => [] as string[])
+  );
+
+  // skip if the url got error in the past week
+  if (unavailable_urls.includes(url.href)) {
+    return TE.right("../assets/no-track.png");
+  }
+
   return pipe(
     TE.tryCatch(() => fetch(url.href), E.toError),
-    TE.tap((x) => (x.status === 200 ? null : console.log(x))),
     TE.filterOrElseW(
       (a) => a.status == 200,
       (r) => new Error(r.statusText)
@@ -80,14 +89,15 @@ export const getAlbumArtwork = (artist: string, album: string): TE.TaskEither<Er
         () => new Error("Could not parse JSON")
       )
     ),
+    TE.tapLeft(() => setCache("unavailable_urls", [...unavailable_urls, url.href])),
     // check if the response is the expected one
     TE.chainEitherKW(ILastFMAlbumResponse.decode),
     TE.map((data) =>
       pipe(
-        data.album.image,
+        data.album?.image ?? [],
         A.last,
-        O.foldW(
-          () => undefined,
+        O.match(
+          () => "../assets/no-track.png",
           (s) => s["#text"]
         )
       )
