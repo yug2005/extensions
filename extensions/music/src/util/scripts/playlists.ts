@@ -15,7 +15,6 @@ import { Track, Playlist, PlaylistKind } from "../models";
 import * as TE from "../task-either";
 import { constructDate, getAttribute } from "../utils";
 import { sortByName } from "./sort";
-import { addTrackArtwork } from "./track";
 
 import { general } from ".";
 
@@ -150,7 +149,6 @@ export const getPlaylistTracks = (id: string, useCache = true) => {
     ),
     TE.getOrElse(() => T.of<readonly Track[]>([])),
     TE.fromTask,
-    TE.chainTaskK(flow(A.map(addTrackArtwork), T.sequenceArray)),
     TE.tap((tracks) => setCache(id, tracks))
   );
 };

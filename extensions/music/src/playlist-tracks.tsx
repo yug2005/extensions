@@ -9,7 +9,7 @@ import * as music from "./util/scripts";
 import * as TE from "./util/task-either";
 
 export const PlaylistTracks = (props: { id: string }) => {
-  const [tracks, setTracks] = useState<Track[]>([]);
+  const [tracks, setTracks] = useState<readonly Track[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -41,5 +41,5 @@ export const PlaylistTracks = (props: { id: string }) => {
     };
   }, []);
 
-  return <Tracks tracks={tracks} isLoading={isLoading} overrideLayout={playlistLayout} dropdown={true} />;
+  return <Tracks tracks={tracks as Track[]} isLoading={isLoading} overrideLayout={playlistLayout} dropdown={true} />;
 };

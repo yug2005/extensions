@@ -98,7 +98,7 @@ export const getAlbumArtwork = (artist: string, album: string): TE.TaskEither<Er
         A.last,
         O.match(
           () => "../assets/no-track.png",
-          (s) => s["#text"]
+          (s) => s["#text"]?.trim() || "../assets/no-track.png"
         )
       )
     )

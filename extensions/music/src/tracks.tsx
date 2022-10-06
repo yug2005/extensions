@@ -12,9 +12,11 @@ import {
 } from "@raycast/api";
 import { pipe } from "fp-ts/lib/function";
 import * as TE from "fp-ts/TaskEither";
-import { useState } from "react";
+import { nanoid } from "nanoid";
+import { useEffect, useMemo, useState } from "react";
 
 import { TrackDetail } from "./track-detail";
+import { getAlbumArtwork } from "./util/artwork";
 import {
   ListOrGrid,
   gridItemSize,
@@ -136,31 +138,64 @@ export const Tracks = (props: TracksComponent): JSX.Element => {
               return a.artist.localeCompare(b.artist) || a.album.localeCompare(b.album) || a.name.localeCompare(b.name);
           }
         })
-        .map((track) =>
-          layout === LayoutType.Grid ? (
-            <Grid.Item
-              key={track.id}
-              id={track.id}
-              title={track.name}
-              subtitle={track.artist}
-              content={track.artwork || "../assets/no-track.png"}
-              actions={<Actions layout={layout} track={track} />}
-            />
-          ) : (
-            <List.Item
-              key={track.id}
-              id={track.id}
-              title={track.name}
-              accessories={showTrackDetail ? null : [{ text: track.artist }]}
-              icon={track.artwork || "../assets/no-track.png"}
-              actions={<Actions layout={layout} track={track} toggle={toggleTrackDetail} />}
-              detail={<TrackDetail track={track} />}
-            />
-          )
-        )}
+        .map((track) => (
+          <Item
+            key={track.id}
+            layout={layout}
+            track={track}
+            toggleTrackDetail={toggleTrackDetail}
+            showTrackDetail={showTrackDetail}
+          />
+        ))}
     </ListOrGrid>
   );
 };
+
+interface IItemGridProps {
+  track: Track;
+  layout: LayoutType.Grid;
+}
+
+interface IItemListProps {
+  track: Track;
+  layout: LayoutType.List;
+  showTrackDetail?: boolean;
+  toggleTrackDetail(): void;
+}
+
+function Item({ track, ...props }: IItemGridProps | IItemListProps) {
+  const [artwork, setArtwork] = useState(track.artwork ?? "../assets/no-track.png");
+  const id = useMemo(() => nanoid(), []);
+
+  useEffect(() => {
+    (async function () {
+      const result = await getAlbumArtwork(track.artist, track.album)();
+      if (result._tag === "Left" || result.right?.trim().length === 0) return;
+      setArtwork(result.right?.trim() || "../assets/no-track.png");
+    })();
+  }, [track]);
+
+  return props.layout === LayoutType.Grid ? (
+    <Grid.Item
+      key={track.id}
+      id={id}
+      title={track.name}
+      subtitle={track.artist}
+      content={artwork}
+      actions={<Actions layout={props.layout} track={track} />}
+    />
+  ) : (
+    <List.Item
+      key={track.id}
+      id={id}
+      title={track.name}
+      accessories={props.showTrackDetail ? null : [{ text: track.artist }]}
+      icon={artwork}
+      actions={<Actions layout={props.layout} track={track} toggle={props.toggleTrackDetail} />}
+      detail={<TrackDetail track={track} />}
+    />
+  );
+}
 
 function Actions({ track, layout, toggle }: { track: Track; layout: LayoutType; toggle?: () => void }) {
   const playTrack = async () => {

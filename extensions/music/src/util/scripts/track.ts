@@ -71,7 +71,7 @@ export const getAllTracks = (useCache = true) => {
     ),
     TE.getOrElse(() => T.of<readonly Track[]>([])),
     TE.fromTask,
-    TE.chainTaskK(flow(A.map(addTrackArtwork), T.sequenceArray)), // think of this like Promise.all but in parallel.
+    // TE.chainTaskK(flow(A.map(addTrackArtwork), T.sequenceArray)), // think of this like Promise.all but in parallel.
     TE.tap((tracks) => setCache("tracks", tracks))
   );
 };
