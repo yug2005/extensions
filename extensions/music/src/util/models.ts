@@ -77,18 +77,21 @@ export interface Preferences {
   trackDropdown: TrackDropdownOption;
 }
 
-export const ILastFMAlbumResponse = t.type({
+export const ILastFMAlbumResponse = t.partial({
   album: t.type({
     artist: t.string,
     mbid: t.string,
     playcount: t.string,
     url: t.string,
     name: t.string,
-    wiki: t.type({
-      published: t.string,
-      summary: t.string,
-      content: t.string,
-    }),
+    wiki: t.union([
+      t.partial({
+        published: t.string,
+        summary: t.string,
+        content: t.string,
+      }),
+      t.undefined,
+    ]),
     listeners: t.string,
     image: t.array(
       t.type({

@@ -3,7 +3,6 @@ import * as O from "fp-ts/Option";
 import * as A from "fp-ts/ReadonlyArray";
 import * as S from "fp-ts/string";
 import * as T from "fp-ts/Task";
-import { Errors } from "io-ts";
 import { runAppleScript } from "run-applescript";
 
 import { createQueryString, runScript, tellMusic } from "../apple-script";
@@ -15,7 +14,7 @@ import * as TE from "../task-either";
 import { constructDate, getAttribute } from "../utils";
 import { sortByName } from "./sort";
 
-export const getAllTracks = (useCache = true): TE.TaskEither<Error | Errors, readonly Track[]> => {
+export const getAllTracks = (useCache = true) => {
   if (useCache) {
     const cachedTracks = getCachedTracks();
 
@@ -72,7 +71,7 @@ export const getAllTracks = (useCache = true): TE.TaskEither<Error | Errors, rea
     ),
     TE.getOrElse(() => T.of<readonly Track[]>([])),
     TE.fromTask,
-    TE.chain(flow(A.map(addTrackArtwork), TE.sequenceArray)), // think of this like Promise.all but in parallel.
+    TE.chainTaskK(flow(A.map(addTrackArtwork), T.sequenceArray)), // think of this like Promise.all but in parallel.
     TE.tap((tracks) => setCache("tracks", tracks))
   );
 };
@@ -102,15 +101,15 @@ export const playOnRepeat = (track: Track) =>
   tell application activeApp to activate
   `);
 
-export const addTrackArtwork = (track: Track): TE.TaskEither<Error | Errors, Track> => {
+export const addTrackArtwork = (track: Track): T.Task<Track> => {
   return pipe(
     track,
     getTrackArtwork,
-    TE.map((artwork) => ({ ...track, artwork }))
+    T.map((artwork) => ({ ...track, artwork }))
   );
 };
 
-export const getTrackArtwork = (track: Track): TE.TaskEither<Error | Errors, string> => {
+export const getTrackArtwork = (track: Track) => {
   const default_artwork = "../assets/no-track.png";
 
   return pipe(
@@ -125,7 +124,8 @@ export const getTrackArtwork = (track: Track): TE.TaskEither<Error | Errors, str
         O.fromNullable,
         O.getOrElse(() => default_artwork)
       )
-    )
+    ),
+    TE.getOrElse(() => T.of(default_artwork))
   );
 };
 

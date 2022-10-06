@@ -94,7 +94,7 @@ export const getPlaylistArtwork = async (id: string, size?: number): Promise<str
   return await parseImageStream(data, size ? { width: size, height: size } : undefined);
 };
 
-export const getPlaylistTracks = (id: string, useCache = true): TE.TaskEither<Error | Errors, readonly Track[]> => {
+export const getPlaylistTracks = (id: string, useCache = true) => {
   if (useCache) {
     const cachedTracks = getCachedPlaylistTracks(id);
     if (O.isSome(cachedTracks)) {
@@ -150,7 +150,7 @@ export const getPlaylistTracks = (id: string, useCache = true): TE.TaskEither<Er
     ),
     TE.getOrElse(() => T.of<readonly Track[]>([])),
     TE.fromTask,
-    TE.chain(flow(A.map(addTrackArtwork), TE.sequenceArray)),
+    TE.chainTaskK(flow(A.map(addTrackArtwork), T.sequenceArray)),
     TE.tap((tracks) => setCache(id, tracks))
   );
 };
